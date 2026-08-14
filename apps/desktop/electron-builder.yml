@@ -1,0 +1,32 @@
+appId: com.deepseekai.harness.desktop
+productName: DeepSeek Harness
+directories:
+  output: dist
+  buildResources: build
+files:
+  - package.json
+  - lib/main.js
+asar: true
+# Reuse the tested Electron dist from node_modules instead of re-downloading
+# the zip (allowBuilds already ran electron's install.js there).
+electronDist: node_modules/electron/dist
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.ico
+  artifactName: ${productName}-Setup-${version}.${ext}
+nsis:
+  oneClick: true
+  perMachine: false
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
+extraResources:
+  - from: .cache/sidecar
+    to: sidecar
+  - from: build/tray.png
+    to: tray.png
+publish:
+  provider: generic
+  url: https://github.com/deepseek-ai/deepseek-harness/releases/download

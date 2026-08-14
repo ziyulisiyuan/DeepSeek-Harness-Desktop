@@ -1,0 +1,42 @@
+{
+  "name": "@deepseek-ai/dsh-desktop",
+  "description": "Windows desktop shell: an Electron window over the real dsh web profile, zero product changes",
+  "version": "0.1.0-rc.5",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/deepseek-ai/deepseek-harness.git",
+    "directory": "apps/desktop"
+  },
+  "type": "module",
+  "main": "lib/main.js",
+  "files": [
+    "lib/main.js",
+    "scripts",
+    "electron-builder.yml"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "tsc -b && tsdown",
+    "dev": "pnpm run build && electron .",
+    "icon": "node scripts/gen-icon.mjs",
+    "prepare-sidecar": "node scripts/prepare-sidecar.mjs",
+    "pack": "pnpm run build && pnpm run icon && pnpm run prepare-sidecar && electron-builder --win",
+    "test": "vitest run tests",
+    "test:e2e": "pnpm run icon && node scripts/e2e.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0",
+    "electron": "^43.4.0",
+    "electron-builder": "^26.15.3",
+    "fflate": "^0.8.3",
+    "playwright": "^1.61.1",
+    "sharp": "^0.35.3",
+    "to-ico": "^1.1.5"
+  }
+}
