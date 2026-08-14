@@ -6,11 +6,12 @@
  *   ensure-repo — create the public repository if it does not exist
  *   release     — create a tagged release and upload the installer asset
  *
- * The HTTP exchange is written raw over a CONNECT-tunneled TLS socket:
- * node's http module misbehaves on a pre-wrapped socket, while the raw path
- * is deterministic and dependency-free. Secrets stay out of files and
- * history: the token is read from DSH_GITHUB_TOKEN only. The proxy is
- * DSH_PUBLISH_PROXY (default http://127.0.0.1:10808); clear it to go direct.
+ * The HTTP exchange is written raw over a TLS socket (tunneled through a
+ * CONNECT proxy when DSH_PUBLISH_PROXY is set): node's http module
+ * misbehaves on a pre-wrapped socket, while the raw path is deterministic
+ * and dependency-free. Secrets stay out of files and history: the token is
+ * read from DSH_GITHUB_TOKEN only. No host, port, or credential is ever
+ * baked into this file or the repository.
  * Everything else (git init, commit, push) is plain git with
  * `http.sslBackend=openssl`.
  */
@@ -24,8 +25,8 @@ if (token === undefined || token === '') {
   console.error('publish-github: DSH_GITHUB_TOKEN is required (never committed; revoke after use)')
   process.exit(1)
 }
-const proxy = process.env.DSH_PUBLISH_PROXY ?? 'http://127.0.0.1:10808'
-const proxyUrl = new URL(proxy)
+const proxyEnv = process.env.DSH_PUBLISH_PROXY
+const proxyUrl = proxyEnv === undefined || proxyEnv === '' ? null : new URL(proxyEnv)
 const API_HOST = 'api.github.com'
 const UPLOAD_HOST = 'uploads.github.com'
 
@@ -86,9 +87,22 @@ function readResponse(socket) {
   })
 }
 
-/** One raw HTTPS request through the CONNECT proxy; resolves {status, body}. */
+/** One raw HTTPS request (direct, or tunneled through a CONNECT proxy when configured). */
 function request(host, method, path, headers, body) {
   return new Promise((resolvePromise, rejectPromise) => {
+    const speak = (socket) => {
+      const lines = [`${method} ${path} HTTP/1.1`, `Host: ${host}`, 'Connection: close']
+      for (const [key, value] of Object.entries(headers)) lines.push(`${key}: ${value}`)
+      socket.write(`${lines.join('\r\n')}\r\n\r\n`)
+      if (body !== undefined) socket.write(body)
+      readResponse(socket).then(resolvePromise, rejectPromise)
+    }
+    if (proxyUrl === null) {
+      const socket = tls.connect({ host, port: 443, servername: host }, () => speak(socket))
+      socket.setTimeout(60_000, () => socket.destroy())
+      socket.on('error', rejectPromise)
+      return
+    }
     const plain = net.connect(Number(proxyUrl.port), proxyUrl.hostname, () => {
       plain.write(`CONNECT ${host}:443 HTTP/1.1\r\nHost: ${host}:443\r\n\r\n`)
     })
@@ -106,13 +120,7 @@ function request(host, method, path, headers, body) {
         return
       }
       const rest = Buffer.from(head.slice(idx + 4), 'latin1')
-      const socket = tls.connect({ socket: plain, servername: host }, () => {
-        const lines = [`${method} ${path} HTTP/1.1`, `Host: ${host}`, 'Connection: close']
-        for (const [key, value] of Object.entries(headers)) lines.push(`${key}: ${value}`)
-        socket.write(`${lines.join('\r\n')}\r\n\r\n`)
-        if (body !== undefined) socket.write(body)
-        readResponse(socket).then(resolvePromise, rejectPromise)
-      })
+      const socket = tls.connect({ socket: plain, servername: host }, () => speak(socket))
       socket.on('error', rejectPromise)
       if (rest.length > 0) plain.unshift(rest)
     }
