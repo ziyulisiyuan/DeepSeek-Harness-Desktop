@@ -40,3 +40,6 @@ apps/desktop/build/
 worktrees/
 .agents/worktrees/
 .typert-*/
+
+# Local machine launcher (hardcodes the developer's own paths); never publish.
+start-dsh-web.bat
